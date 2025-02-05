@@ -60,11 +60,16 @@ Lynia.element = {
 
 
         // ------------------------------
-        // 杂七杂八的子节点
+        // 一些有的没的子节点
+        /** @type {HTMLDivElement} Dialog */
         #modalDialog = undefined
+        /** @type {HTMLDivElement} Content */
         #modalContent = undefined
+        /** @type {HTMLDivElement} Header */
         #modalHeader = undefined
+        /** @type {HTMLDivElement} Body */
         #modalBody = undefined
+        /** @type {HTMLDivElement} Footer */
         #modalFooter = undefined
 
         /** @type {HTMLElement} 位于 Header 的关闭按钮 */
@@ -135,7 +140,7 @@ Lynia.element = {
             this.#close1.setAttribute("data-bs-dismiss", "modal")
             this.#close1.setAttribute("aria-label", "Close")
 
-            // text 文本 
+            // text 文本
             this.text = document.createElement('div')
             this.text.id = "text"
 
@@ -190,14 +195,14 @@ Lynia.element = {
                     this.#close2.textContent = "取消"
 
                     this.#close2.removeAttribute("data-bs-dismiss")
-                    this.#close2.addEventListener("click", this.endEditing)
+                    this.#close2.addEventListener("click", this.endEditing.bind(this))
 
                 } else {
                     // 保存当前笔记
                     GM_setValue(`${this.problemLink.href}`, Lynia.toolMethod.StringToInnerHTML(this.#textarea.value))
 
                     // 退出编辑模式
-                    this.endEditing()
+                    this.endEditing.bind(this)()
                 }
             })
         }
@@ -303,7 +308,7 @@ function main() {
 // 脚本加载入口
 setTimeout(() => {
     Lynia.element.init()
-    Lynia.common.init()
+    Lynia.observer.init()
     main()
 }, 2000)
 // ------------------------------
