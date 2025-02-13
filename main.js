@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AT&CF Problems Note
 // @namespace    https://github.com/yxz2333
-// @version      1.0.0
+// @version      1.1.0
 // @description  在 kenkoooo.com 和 cf.kira924age.com 表格网站添加题目笔记
 // @author       Lynia
 // @match        *://kenkoooo.com/atcoder/*
@@ -53,6 +53,8 @@ Lynia.element = {
         modal = undefined
         /** @type {HTMLDivElement} 装文字的元素 */
         text = undefined
+        /** @type {HTMLDivElement} 包裹题目难度圆和题目链接的 div */
+        problemCell = undefined
         /** @type {HTMLAnchorElement} 题目链接元素 */
         problemLink = undefined
         /** @type {Boolean} 是否在笔记编辑状态 */
@@ -99,8 +101,14 @@ Lynia.element = {
 
             // 读取笔记
             const localValue = GM_getValue(`${this.problemLink.href}`, null)
-            if (localValue) this.text.innerHTML = localValue
-            else this.text.innerHTML = "本题尚无笔记"
+            if (localValue) {
+                this.text.innerHTML = localValue
+                this.problemCell.style.setProperty("background-color", "rgba(236, 240, 5, 0.7)", "important")
+            }
+            else {
+                this.text.innerHTML = "本题尚无笔记"
+                this.problemCell.style.removeProperty("background-color")
+            }
         }
 
         init() {
@@ -187,7 +195,12 @@ Lynia.element = {
 
                 if (this.isEditing) {
                     // 进入编辑模式
-                    this.#textarea.value = Lynia.toolMethod.InnerHTMLToString(this.text.innerHTML)
+
+                    // 读取笔记
+                    const localValue = GM_getValue(`${this.problemLink.href}`, null)
+                    if (localValue) this.#textarea.value = Lynia.toolMethod.InnerHTMLToString(localValue)
+                    else this.#textarea.value = ''
+
                     this.#modalBody.removeChild(this.text)
                     this.#modalBody.appendChild(this.#textareaDiv)
 
@@ -198,10 +211,11 @@ Lynia.element = {
                     this.#close2.addEventListener("click", this.endEditing.bind(this))
 
                 } else {
+                    // 退出编辑模式
+
                     // 保存当前笔记
                     GM_setValue(`${this.problemLink.href}`, Lynia.toolMethod.StringToInnerHTML(this.#textarea.value))
 
-                    // 退出编辑模式
                     this.endEditing.bind(this)()
                 }
             })
@@ -220,34 +234,68 @@ Lynia.element = {
  * @description 监听器
  */
 Lynia.observer = {
-    /**
-     * @type {MutationObserver}
-     * @description 表格监听器，监听当前选择 table，table 更新时重新遍历新的表格元素
-     */
-    table: undefined,
-    tableInit() {
-        try {
-            let targetElement = null
-            if (Lynia.state.isAtCoder) targetElement = document.querySelector(".table-tab")
-            else if (Lynia.state.isCodeforces) targetElement = document.querySelector("#radio-buttons")
-            else throw new Error("url错误")
 
-            if (targetElement === null) throw new Error("找不到表格选项")
+    tab: {
+        /**
+         * @type {MutationObserver}
+         * @description 表格种类切换选项监听器，监听当前 table 种类，tab 更新时重新遍历新的表格元素
+         */
+        observer: undefined,
+        init() {
+            try {
+                let targetElement = null
+                if (Lynia.state.isAtCoder) targetElement = document.querySelector(".table-tab")
+                else if (Lynia.state.isCodeforces) targetElement = document.querySelector("#radio-buttons")
+                else throw new Error("url错误")
 
-            this.tableObserver = new MutationObserver(() => {
-                handleTableProblems()
-            })
-            this.tableObserver.observe(targetElement, {
-                attributes: true,
-                attributeFilter: ['class'],
-                subtree: true
-            })
-        } catch (error) {
-            console.log(error.message)
+                if (targetElement === null) throw new Error("找不到表格选项")
+
+                this.observer = new MutationObserver(() => {
+                    handleTableProblems()
+                })
+                this.observer.observe(targetElement, {
+                    attributes: true,
+                    attributeFilter: ['class'],
+                    subtree: true
+                })
+            } catch (error) {
+                console.log(error.message)
+            }
         }
     },
+
+    page: {
+        /**
+         * @type {MutationObserver}
+         * @description 表格页码切换监听器，监听当前 table 页码，tab 更新时重新遍历新的表格元素
+         */
+        observer: undefined,
+        init() {
+            try {
+                let targetElement = null
+                if (Lynia.state.isAtCoder) return
+                else if (Lynia.state.isCodeforces) targetElement = document.querySelector(".ant-table-pagination")
+                else throw new Error("url错误")
+
+                if (targetElement === null) throw new Error("找不到表格选项")
+
+                this.observer = new MutationObserver(() => {
+                    handleTableProblems()
+                })
+                this.observer.observe(targetElement, {
+                    attributes: true,
+                    attributeFilter: ['class'],
+                    subtree: true
+                })
+            } catch (error) {
+                console.log(error.message)
+            }
+        }
+    },
+
     init() {
-        this.tableInit()
+        this.tab.init()
+        this.page.init()
     }
 }
 
@@ -269,30 +317,39 @@ const handleTableProblems = () => {
     // 找出所有表格元素
     let tableProblemElements
     if (Lynia.state.isAtCoder) tableProblemElements = document.querySelectorAll(".table-problem")
-    else if (Lynia.state.isCodeforces) tableProblemElements = document.querySelectorAll(".ant-table-cell")
+    else if (Lynia.state.isCodeforces) tableProblemElements = document.querySelectorAll(".cell-element")
     else return
 
     tableProblemElements.forEach(
         (element) => {
+            if (!(element instanceof HTMLElement)) return
+
             // 找到表格里的 难度圆 和 题目链接
             let circle, link
             if (Lynia.state.isAtCoder) circle = element.querySelector('.difficulty-circle')
             else circle = element.querySelector('.common-difficulty-circle')
             link = element.querySelector('a')
 
-            if (circle) {
+            if (circle && link) {
                 circle.setAttribute("data-bs-toggle", "modal")
                 circle.setAttribute("data-bs-target", "#dialog")
                 circle.addEventListener("click", () => {
-                    // 复制链接元素
-                    for (let attr of link.attributes) {
+                    // 更新当前 click 的 cell 
+                    Lynia.element.dialog.problemCell = element
+
+                    // 更新当前 click 的 cell 的链接元素
+                    for (let attr of link.attributes)
                         Lynia.element.dialog.problemLink.setAttribute(attr.name, attr.value)
-                    }
                     Lynia.element.dialog.problemLink.textContent = link.textContent
 
                     // dialog 退出 edit 状态
                     Lynia.element.dialog.endEditing()
                 })
+
+                // 如果本题存在笔记，表格染色
+                const localValue = GM_getValue(`${link.href}`, null)
+                if (localValue) element.style.setProperty("background-color", "rgba(236, 240, 5, 0.7)", "important")
+                else element.style.removeProperty("background-color")
             }
         }
     )
